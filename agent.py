@@ -24,11 +24,18 @@ class Agent:
         self.pos = (1, 1)
         self.visited = set()
         self.safe_squares = set()
+        
+
+        self.has_arrow = True
 
         # Fakta awal: Posisi [1,1] pasti aman
         self.kb.tell("OK_1_1")  # OK_x_y berarti kotak (x,y) aman
         self.safe_squares.add((1, 1))
         self.visited.add((1, 1))
+
+        self.has_gold = False
+        self.goal = 'find_gold' # Tujuan awal: cari emas
+        self.path_history = [(1,1)]
 
     def process_percepts(self, percepts):
         """Memproses persepsi dan menambahkan fakta baru ke KB (TELL)."""
@@ -57,6 +64,14 @@ class Agent:
             print(f"Persepsi: Ada Stench di {self.pos}")
             if f"S_{x}_{y}" not in self.kb.facts:
                 self.kb.tell(f"S_{x}_{y}") # B_x_y -> Ada Stench di (x,y)
+        
+        if percepts['glitter']:
+            print("Persepsi: Melihat *GLITTER*! Mengambil Emas!")
+            self.has_gold = True
+            self.goal = 'go_home' # Ganti tujuan: pulang! [cite: 252]
+            # (Aksi 'grab' bisa jadi metode terpisah jika mau)
+            # Kita anggap 'grab' terjadi otomatis saat 'glitter'
+            self.kb.tell("GRAB_GOLD")
 
     def update_safe_squares(self):
         """Menggunakan KB untuk menyimpulkan kotak mana yang aman."""
@@ -121,21 +136,60 @@ class Agent:
 
     def decide_next_move(self):
         """Memutuskan gerakan selanjutnya berdasarkan kotak aman yang belum dikunjungi."""
-        # Cari kotak aman yang berdekatan dan belum dikunjungi
-        adj_squares = self.world.get_adjacent_squares(self.pos)
+        
+        # TUGAS 3: Logika berdasarkan tujuan
+        if self.goal == 'go_home':
+            # Tujuan: Pulang ke (1,1) 
+            print("AKSI (Tugas 3): Tujuan adalah pulang ke (1,1).")
+            if self.pos == (1,1):
+                print("AKSI: Berhasil keluar dari gua dengan Emas! Menang!")
+                return 'exit' # Sinyal untuk menghentikan simulasi
 
-        unvisited_safe_squares = [
-            sq for sq in adj_squares if sq in self.safe_squares and sq not in self.visited
-        ]
+            # Ambil langkah terakhir dari jejak 
+            if len(self.path_history) > 1:
+                # Kita perlu pop langkah saat ini untuk dapat langkah sebelumnya
+                self.path_history.pop() 
+                target_pos = self.path_history[-1] 
+                print(f"AKSI: Mundur ke {target_pos} melalui jalur aman.")
+                return target_pos
+            else:
+                return None # Sudah di (1,1) atau buntu
 
-        if unvisited_safe_squares:
-            # Jika ada, pilih salah satu sebagai tujuan
-            target_pos = unvisited_safe_squares[0]
-            print(f"AKSI: Memutuskan untuk pindah ke kotak aman terdekat: {target_pos}")
-            return target_pos
-        else:
-            print("AKSI: Tidak ada kotak aman terdekat yang belum dikunjungi. Mundur atau eksplorasi lebih jauh diperlukan.")
-            return None
+        else: # self.goal == 'find_gold'
+            # TUGAS 2: Logika Menembak
+            # Agen hanya berpikir untuk menembak jika sedang mencari emas
+            if self.has_arrow:
+                for x in range(1, self.world.size + 1):
+                    for y in range(1, self.world.size + 1):
+                        # Jika inferensi (dari Tugas 1) yakin ada Wumpus
+                        if self.kb.ask(f"W_{x}_{y}"): 
+                            self.shoot_at((x, y))
+                            return None # 'None' berarti tidak bergerak langkah ini
+
+            # Logika Asli: Cari kotak aman terdekat
+            adj_squares = self.world.get_adjacent_squares(self.pos)
+            unvisited_safe_squares = [
+                sq for sq in adj_squares if sq in self.safe_squares and sq not in self.visited
+            ]
+
+            if unvisited_safe_squares:
+                # Jika ada, pilih salah satu sebagai tujuan
+                target_pos = unvisited_safe_squares[0]
+                print(f"AKSI: Memutuskan untuk pindah ke kotak aman terdekat: {target_pos}")
+                return target_pos
+            else:
+                # Bagian ini (Tugas 3): jika buntu, mundur
+                print("AKSI: Buntu, tidak ada kotak aman terdekat. Mundur...")
+                if len(self.path_history) > 1:
+                    self.path_history.pop()
+                    target_pos = self.path_history[-1]
+                    print(f"AKSI: Mundur ke {target_pos}")
+                    return target_pos
+                else:
+                    print("AKSI: Tidak bisa mundur lagi. Terjebak.")
+                    return None
+        
+
 
     def move_to(self, new_pos):
         """Menggerakkan agen ke posisi baru."""
@@ -144,7 +198,15 @@ class Agent:
             self.visited.add(self.pos)
             print(f"Agen sekarang berada di {self.pos}")
 
-    def run_simulation(self, steps=5):
+
+            # TUGAS 3: Catat jejak untuk pulang
+            # Hanya tambahkan jika itu langkah maju (bukan mundur)
+            if self.pos not in self.path_history:
+                     self.path_history.append(self.pos)
+
+            print(f"Agen sekarang berada di {self.pos}")
+
+    def run_simulation(self, steps=15):
         """Menjalankan simulasi langkah demi langkah."""
         for step in range(steps):
             print(f"\n--- LANGKAH {step + 1} ---")
@@ -162,14 +224,59 @@ class Agent:
             # 4. Agen memutuskan gerakan selanjutnya
             next_pos = self.decide_next_move()
 
-            # 5. Agen bergerak
-            if next_pos:
-                self.move_to(next_pos)
-            else:
-                print("Simulasi berhenti, agen tidak bisa menentukan langkah aman.")
+            # 5. Agen bergerak --- URUTAN DIPERBAIKI ---
+            
+            # PERIKSA 'exit' DULU
+            if next_pos == 'exit':
+                print("Simulasi selesai. Agen berhasil keluar.")
                 break
 
-        print(f"KB saat ini berisi {len(self.kb.facts)} fakta.")
+            # KEMUDIAN, PERIKSA JIKA ADA GERAKAN
+            if next_pos:
+                self.move_to(next_pos)
+            
+            # JIKA TIDAK ADA GERAKAN (None)
+            else:
+                # Ini terjadi jika agen menembak (Tugas 2) atau buntu total
+                # Kita tidak 'break' agar simulasi lanjut (untuk mendengar 'scream')
+                print("AKSI: Tidak ada gerakan di langkah ini (menembak atau buntu).")
+                
+                # Jika Anda ingin simulasi berhenti jika buntu total:
+                # (Logika opsional, tapi bagus)
+                # if self.goal != 'find_gold' or not self.has_arrow:
+                #    print("Simulasi berhenti, agen tidak bisa menentukan langkah aman.")
+                #    break
+                pass # Biarkan simulasi lanjut
+
+            print(f"KB saat ini berisi {len(self.kb.facts)} fakta.")
+    
+    # ... di dalam kelas Agent di agent.py
+    def shoot_at(self, pos):
+        """Mencoba menembak Wumpus di pos"""
+        if self.has_arrow:
+            print(f"AKSI: Menembak panah ke {pos}")
+            self.has_arrow = False
+            hit = self.world.shoot_arrow(pos)
+
+            if hit:
+                print("Persepsi: Mendengar *SCREAM*!")
+                # Wumpus mati, semua fakta Stench yang lama tidak valid
+                # (Ini opsional tapi bagus)
+                # Kita juga bisa menambahkan fakta bahwa Wumpus mati
+                self.kb.tell("~WUMPUS_ALIVE")
+
+                # Hapus semua fakta Stench dari KB karena Wumpus mati
+                # (Cara sederhana: buat set baru tanpa fakta 'S_')
+                facts_to_remove = {f for f in self.kb.facts if f.startswith('S_')}
+                for f in facts_to_remove:
+                    self.kb.facts.remove(f)
+
+                # Wumpus di pos itu sudah mati, jadi ~W
+                self.kb.tell(f"~W_{pos[0]}_{pos[1]}")
+            else:
+                print("AKSI: Tembakan meleset.")
+        else:
+            print("AKSI: Sudah tidak punya panah.")
 
 
 # --- Main Program ---
@@ -179,4 +286,4 @@ if __name__ == "__main__":
     agent = Agent(wumpus_world)
 
     # Jalankan simulasi
-    agent.run_simulation(steps=3)
+    agent.run_simulation(steps=15)

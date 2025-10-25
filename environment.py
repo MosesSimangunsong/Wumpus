@@ -9,6 +9,8 @@ class WumpusWorld:
         self.gold_pos = (2, 3)  # Contoh posisi Emas
         self.pits_pos = [(3, 1), (3, 3), (4, 4)]  # Contoh posisi Pit
 
+        self.wumpus_alive = True
+
         print("=" * 30)
         print(f"Lingkungan Wumpus World {size}x{size} dibuat.")
         print(f"Wumpus di: {self.wumpus_pos}")
@@ -31,15 +33,15 @@ class WumpusWorld:
         return adj
     
     def shoot_arrow(self, pos):
-    """Agen menembak ke arah pos"""
-    if not self.wumpus_alive:
-        return : False
-    
-    if pos == self.wumpus_pos:
-        self.wumpus_alive = False
-        self.wumpus_pos = None
-        return True
-    return False
+        """Agen menembak ke arah pos"""
+        if not self.wumpus_alive:
+            return  False
+        
+        if pos == self.wumpus_pos:
+            self.wumpus_alive = False
+            self.wumpus_pos = None
+            return True
+        return False
 
 
     def get_percepts(self, pos):
@@ -53,16 +55,16 @@ class WumpusWorld:
         }
 
         # Cek Stench (Bau Wumpus)
-        if self.wumpus_alive and self.wumpus_pos in self.get_adjacent_squares(pos): [cite: 78]
-     percepts['stench'] = True
+        if self.wumpus_alive and self.wumpus_pos in self.get_adjacent_squares(pos):
+            percepts['stench'] = True
 
-        # Cek Breeze (Angin dari Pit)
+                # Cek Breeze (Angin dari Pit)
         for pit in self.pits_pos:
             if pit in self.get_adjacent_squares(pos):
                 percepts['breeze'] = True
                 break
 
-        # Cek Glitter (Kilau Emas)
+                # Cek Glitter (Kilau Emas)
         if pos == self.gold_pos:
             percepts['glitter'] = True
 
